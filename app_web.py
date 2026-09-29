@@ -87,7 +87,7 @@ TASK_PATTERNS = [
     ("搜索", ["搜索", "搜一下", "查一下", "帮我查", "帮我搜", "找一下", "搜搜", "查查"]),
     ("发邮件", ["发邮件", "发送邮件", "写邮件", "发一封", "发给"]),
     ("做PPT", ["做PPT", "做个PPT", "生成PPT", "创建PPT", "做ppt"]),
-    ("做Word", ["做Word", "写文档", "生成文档", "写方案", "写报告"]),
+    ("做Word", ["做Word", "写文档", "生成文档", "写方案", "写报告", "写周报", "写总结"]),
     ("提醒", ["提醒我", "设置提醒", "添加提醒", "叫我"]),
     ("读文件", ["读一下", "打开", "总结", "分析", "提取"]),
     ("列文件", ["有哪些文件", "列出文件", "看看文件"]),
@@ -227,6 +227,8 @@ system_prompt_base = """
 - 用户问实时新闻、股票、事实 → 用 web_search。
 - 用户说发邮件 → 用 send_email。
 - 用户说提醒 → 用 add_reminder / list_reminders / delete_reminder。
+- 用户说写文档/周报/报告/方案 → 必须用 make_word 生成文件。
+- 用户说做PPT/幻灯片 → 必须用 make_ppt 生成文件。
 
 不要机械地说：
 “您好，很高兴为您服务。”
@@ -260,7 +262,7 @@ system_prompt_base = """
 - 定时提醒：添加、查看、删除提醒。
 - 当前时间：获取电脑当前日期和时间。
 - 文件处理：列出、搜索、创建、复制、移动、重命名、查看信息、删除文件。
-- 生成文件：生成 PPT 和 Word。
+- 生成文件：生成 PPT（make_ppt）和 Word（make_word）。
 - 文档读取：读取 Word/PPT/PDF/Excel。
 
 你是“饭加鱼”，不是“小龙虾”。
@@ -353,7 +355,7 @@ def _looks_like_answer(text):
         return False
     if len(text) <= 50:
         return True
-    markers = ["发给", "@", "主题", "内容", "正文", "时间", "点", "确认", "可以", "好的"]
+    markers = ["发给", "@", "主题", "内容", "正文", "时间", "点", "确认", "可以", "好的", "随便", "都行", "你看着办"]
     return any(m in text for m in markers)
 
 
@@ -389,7 +391,7 @@ def _handle_dsml_reply(raw_reply, messages):
 
         return final_reply, True
     except Exception as e:
-        return f"🐝 工具执行了，但整理结果时出错了：\n\n{e}", True
+        return f"🐶 工具执行了，但整理结果时出错了：\n\n{e}", True
 
 
 def chat(message, history):
@@ -415,11 +417,11 @@ def chat(message, history):
 
         if result:
             if not result.get("success"):
-                return f"🐝 查看文件时出错：\n\n{result.get('error', '未知错误')}", None
+                return f"🐶 查看文件时出错：\n\n{result.get('error', '未知错误')}", None
             items = result.get("items", [])
             if not items:
-                return f"🐝 {result.get('folder', '这个文件夹')} 目前没有看到文件。", None
-            lines = [f"🐝 我看到了 {len(items)} 个项目："]
+                return f"🐶 {result.get('folder', '这个文件夹')} 目前没有看到文件。", None
+            lines = [f"🐶 我看到了 {len(items)} 个项目："]
             for item in items[:100]:
                 kind = "📁" if item.get("type") == "folder" else "📄"
                 size = item.get("size_readable")
@@ -507,7 +509,7 @@ def chat(message, history):
             final_reply = final_response.choices[0].message.content or ""
             final_reply = _strip_dsml(final_reply)
         except Exception as e:
-            final_reply = f"🐝 工具已经执行了，不过我在整理结果时出错了：\n\n{e}"
+            final_reply = f"🐶 工具已经执行了，不过我在整理结果时出错了：\n\n{e}"
 
     else:
         raw_reply = assistant_message.content or ""
@@ -522,34 +524,35 @@ def chat(message, history):
     if _contains_dsml(final_reply):
         final_reply = _strip_dsml(final_reply)
         if not final_reply:
-            final_reply = "🐝 主人，刚才处理时出了点小状况，我重新理一下，你再问我一次好不好？"
+            final_reply = "🐶 主人，刚才处理时出了点小状况，我重新理一下，你再问我一次好不好？"
 
     name = extract_name(message)
     if name:
         set_memory("姓名", name)
 
-    # 检查是否生成了文件
-    created_file = None
-    if isinstance(final_reply, str):
-        pass
-
-    return final_reply, created_file
+    return final_reply, None
 
 
 # =========================================================
-# 全局保存最后一次生成的文件路径
+# 扫描生成的文件
 # =========================================================
-
-_last_created_file = {"path": None}
-
 
 def _scan_for_created_file():
     """扫描输出目录，找最新生成的文件。"""
     base = Path(__file__).parent
     candidates = []
 
-    for folder_name in ["生成的word", "生成的PPT", "生成的Excel"]:
-        folder = base / folder_name
+    search_dirs = [
+        base / "skills" / "生成的Word",
+        base / "skills" / "生成的PPT",
+        base / "skills" / "生成的Excel",
+        base / "生成的word",
+        base / "生成的PPT",
+        base / "生成的Excel",
+        base / "生成的Word",
+    ]
+
+    for folder in search_dirs:
         if not folder.exists():
             continue
         for f in folder.glob("*"):
@@ -584,7 +587,6 @@ def chat_api():
     if not message:
         return jsonify({"reply": "主人，你还没说话呢～", "file_data": None, "file_name": None})
 
-    # 记录一下调用前，输出目录里最新的文件
     before_file = _scan_for_created_file()
 
     try:
@@ -592,7 +594,6 @@ def chat_api():
     except Exception as e:
         return jsonify({"reply": f"出错了：{e}", "file_data": None, "file_name": None})
 
-    # 检查调用后是否有新文件
     after_file = _scan_for_created_file()
 
     file_data = None
@@ -622,5 +623,5 @@ def download():
 
 
 if __name__ == "__main__":
-    print("🐝 饭加鱼 Flask 版启动中...")
+    print("🐶 饭加鱼 Flask 版启动中...")
     app.run(host="0.0.0.0", port=7860, debug=False)
