@@ -9,6 +9,7 @@ import re
 import importlib
 import threading
 import time
+import base64
 from datetime import datetime
 from pathlib import Path
 
@@ -401,7 +402,6 @@ def chat(message, history):
                 recent.append(content)
     combined = text + "\n" + "\n".join(recent)
 
-    # 本地文件列表任务
     list_intents = ["有哪些文件", "有多少文件", "列出文件", "看看文件", "扫一下桌面", "查看桌面", "桌面上有什么"]
     if any(x in combined for x in list_intents):
         if "桌面" in combined:
@@ -528,7 +528,42 @@ def chat(message, history):
     if name:
         set_memory("姓名", name)
 
-    return final_reply, None
+    # 检查是否生成了文件
+    created_file = None
+    if isinstance(final_reply, str):
+        pass
+
+    return final_reply, created_file
+
+
+# =========================================================
+# 全局保存最后一次生成的文件路径
+# =========================================================
+
+_last_created_file = {"path": None}
+
+
+def _scan_for_created_file():
+    """扫描输出目录，找最新生成的文件。"""
+    base = Path(__file__).parent
+    candidates = []
+
+    for folder_name in ["生成的word", "生成的PPT", "生成的Excel"]:
+        folder = base / folder_name
+        if not folder.exists():
+            continue
+        for f in folder.glob("*"):
+            if f.is_file():
+                try:
+                    candidates.append((f.stat().st_mtime, f))
+                except Exception:
+                    continue
+
+    if not candidates:
+        return None
+
+    candidates.sort(reverse=True)
+    return str(candidates[0][1])
 
 
 # =========================================================
@@ -547,13 +582,35 @@ def chat_api():
     history = data.get("history", [])
 
     if not message:
-        return jsonify({"reply": "主人，你还没说话呢～", "file": None})
+        return jsonify({"reply": "主人，你还没说话呢～", "file_data": None, "file_name": None})
+
+    # 记录一下调用前，输出目录里最新的文件
+    before_file = _scan_for_created_file()
 
     try:
-        reply, file_path = chat(message, history)
-        return jsonify({"reply": reply, "file": file_path})
+        reply, _ = chat(message, history)
     except Exception as e:
-        return jsonify({"reply": f"出错了：{e}", "file": None})
+        return jsonify({"reply": f"出错了：{e}", "file_data": None, "file_name": None})
+
+    # 检查调用后是否有新文件
+    after_file = _scan_for_created_file()
+
+    file_data = None
+    file_name = None
+
+    if after_file and after_file != before_file:
+        try:
+            with open(after_file, "rb") as f:
+                file_data = base64.b64encode(f.read()).decode("utf-8")
+            file_name = os.path.basename(after_file)
+        except Exception as e:
+            print(f"读取文件失败：{e}")
+
+    return jsonify({
+        "reply": reply,
+        "file_data": file_data,
+        "file_name": file_name,
+    })
 
 
 @app.route("/download")
