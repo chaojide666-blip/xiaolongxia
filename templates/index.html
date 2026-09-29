@@ -10,7 +10,6 @@
 
 <div class="layout">
 
-    <!-- ========== 左侧边栏 ========== -->
     <aside class="sidebar">
         <div class="sidebar-top">
             <div class="sidebar-logo">🐶 饭加鱼</div>
@@ -52,10 +51,8 @@
         </div>
     </aside>
 
-    <!-- ========== 主区域 ========== -->
     <div class="app">
 
-        <!-- 顶部 -->
         <header class="header">
             <div class="header-left"></div>
             <div class="header-center">
@@ -67,7 +64,6 @@
             </div>
         </header>
 
-        <!-- 聊天区 -->
         <main class="chat-area" id="chatArea">
             <div class="welcome" id="welcome">
                 <div class="welcome-logo">🐶</div>
@@ -82,7 +78,6 @@
             </div>
         </main>
 
-        <!-- 底部输入区 -->
         <footer class="input-area">
             <div class="input-wrap">
                 <textarea
@@ -111,7 +106,6 @@
     let isSending = false;
 
     const chatArea = document.getElementById('chatArea');
-    const welcome = document.getElementById('welcome');
     const msgInput = document.getElementById('msgInput');
     const sendBtn = document.getElementById('sendBtn');
 
@@ -225,6 +219,29 @@
         if (el) el.remove();
     }
 
+    function downloadFile(base64Data, fileName) {
+        try {
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray]);
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('下载失败', e);
+        }
+    }
+
     async function sendMessage() {
         const text = msgInput.value.trim();
         if (!text || isSending) return;
@@ -254,8 +271,9 @@
             history.push({role: 'user', content: text});
             history.push({role: 'assistant', content: reply});
 
-            if (data.file) {
-                appendFile(data.file);
+            if (data.file_data && data.file_name) {
+                downloadFile(data.file_data, data.file_name);
+                appendFileNotice(data.file_name);
             }
         } catch (e) {
             removeTyping();
@@ -267,7 +285,7 @@
         }
     }
 
-    function appendFile(path) {
+    function appendFileNotice(fileName) {
         const row = document.createElement('div');
         row.className = 'msg-row assistant';
 
@@ -277,14 +295,8 @@
 
         const bubble = document.createElement('div');
         bubble.className = 'bubble file-bubble';
+        bubble.textContent = '文件已开始下载：' + fileName;
 
-        const link = document.createElement('a');
-        link.href = '/download?path=' + encodeURIComponent(path);
-        const name = path.split(/[\\\\/]/).pop();
-        link.textContent = '点击下载：' + name;
-        link.target = '_blank';
-
-        bubble.appendChild(link);
         row.appendChild(avatar);
         row.appendChild(bubble);
         chatArea.appendChild(row);
