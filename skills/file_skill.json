@@ -1,0 +1,78 @@
+{
+  "name": "file_skill",
+  "module": "file_skill",
+  "description": "文件处理技能：列出、搜索、创建、复制、移动、重命名、查看信息、删除文件。",
+  "functions": [
+    {
+      "name": "list_files",
+      "description": "列出指定文件夹内容。folder 可使用 Windows 路径或特殊目录名：桌面、下载、文档。",
+      "parameters": {
+        "folder": {"type": "string", "description": "文件夹路径或特殊目录名"},
+        "recursive": {"type": "boolean", "description": "是否递归子目录"}
+      },
+      "required": ["folder", "recursive"]
+    },
+    {
+      "name": "search_files",
+      "description": "按文件名搜索文件。",
+      "parameters": {
+        "folder": {"type": "string"},
+        "keyword": {"type": "string"},
+        "recursive": {"type": "boolean"}
+      },
+      "required": ["folder", "keyword", "recursive"]
+    },
+    {
+      "name": "create_folder",
+      "description": "创建文件夹。",
+      "parameters": {
+        "folder": {"type": "string"}
+      },
+      "required": ["folder"]
+    },
+    {
+      "name": "copy_file",
+      "description": "复制文件，不覆盖已有文件。",
+      "parameters": {
+        "source": {"type": "string"},
+        "destination": {"type": "string"}
+      },
+      "required": ["source", "destination"]
+    },
+    {
+      "name": "move_file",
+      "description": "移动文件，不覆盖已有文件。",
+      "parameters": {
+        "source": {"type": "string"},
+        "destination": {"type": "string"}
+      },
+      "required": ["source", "destination"]
+    },
+    {
+      "name": "rename_file",
+      "description": "重命名文件，不覆盖已有文件。",
+      "parameters": {
+        "path": {"type": "string"},
+        "new_name": {"type": "string"}
+      },
+      "required": ["path", "new_name"]
+    },
+    {
+      "name": "get_file_info",
+      "description": "查看文件或文件夹信息，包括大小和修改时间。",
+      "parameters": {
+        "path": {"type": "string"}
+      },
+      "required": ["path"]
+    },
+    {
+      "name": "delete_file",
+      "description": "删除文件。只有用户已经明确确认后才能 confirmed=true。",
+      "parameters": {
+        "path": {"type": "string"},
+        "confirmed": {"type": "boolean"}
+      },
+      "required": ["path", "confirmed"]
+    }
+  ]
+}

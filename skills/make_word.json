@@ -1,0 +1,16 @@
+{
+  "name": "make_word",
+  "module": "make_word",
+  "description": "生成 Word 文档。",
+  "functions": [
+    {
+      "name": "make_word",
+      "description": "创建 Word 文档。当用户明确要求写文档、做方案、生成报告、创建 Word 文件时使用。",
+      "parameters": {
+        "title": {"type": "string", "description": "文档标题"},
+        "content": {"type": "string", "description": "完整正文内容，可以使用 Markdown 标题层级"}
+      },
+      "required": ["title", "content"]
+    }
+  ]
+}

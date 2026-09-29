@@ -1,0 +1,16 @@
+{
+  "name": "make_ppt",
+  "module": "make_ppt",
+  "description": "生成 PowerPoint 演示文稿。",
+  "functions": [
+    {
+      "name": "make_ppt",
+      "description": "创建 PowerPoint 演示文稿。当用户明确要求制作、生成、创建 PPT 或幻灯片时使用。",
+      "parameters": {
+        "topic": {"type": "string", "description": "PPT 主题"},
+        "pages": {"type": "integer", "description": "PPT 页数，建议 5 到 15"}
+      },
+      "required": ["topic", "pages"]
+    }
+  ]
+}

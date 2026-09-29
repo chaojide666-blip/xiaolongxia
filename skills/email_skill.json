@@ -1,0 +1,21 @@
+{
+  "name": "email_skill",
+  "module": "email_skill",
+  "description": "邮件技能：发送电子邮件。",
+  "functions": [
+    {
+      "name": "send_email",
+      "description": "发送邮件。需要发件人邮箱、SMTP授权码、收件人邮箱、主题和正文。如果记忆里有发件邮箱和授权码，可以自动补全。",
+      "parameters": {
+        "sender_email": {"type": "string", "description": "发件人邮箱地址"},
+        "auth_code": {"type": "string", "description": "邮箱SMTP授权码"},
+        "receiver_email": {"type": "string", "description": "收件人邮箱地址"},
+        "subject": {"type": "string", "description": "邮件主题"},
+        "body": {"type": "string", "description": "邮件正文"},
+        "smtp_server": {"type": "string", "description": "SMTP服务器地址，如 smtp.qq.com"},
+        "smtp_port": {"type": "integer", "description": "SMTP端口，默认465"}
+      },
+      "required": ["receiver_email", "subject", "body"]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "web_search",
+  "module": "web_search",
+  "description": "联网搜索技能",
+  "functions": [
+    {
+      "name": "web_search",
+      "description": "搜索网页信息。用于新闻、股票、具体事实。注意：天气查询必须使用 get_weather，禁止用本工具查天气。",
+      "parameters": {
+        "query": {"type": "string", "description": "搜索关键词"},
+        "max_results": {"type": "integer", "description": "返回结果数量，默认5"}
+      },
+      "required": ["query"]
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "name": "excel_skill",
+  "module": "excel_skill",
+  "description": "Excel 读取技能",
+  "functions": [
+    {
+      "name": "read_excel_file",
+      "description": "读取 Excel 文件的实际数据。",
+      "parameters": {
+        "path": {
+          "type": "string"
+        },
+        "sheet_name": {
+          "type": "string"
+        },
+        "max_rows": {
+          "type": "integer"
+        },
+        "max_cols": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sheet_name",
+        "max_rows",
+        "max_cols"
+      ]
+    },
+    {
+      "name": "list_excel_sheets",
+      "description": "查看 Excel 工作表。",
+      "parameters": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    },
+    {
+      "name": "summarize_excel",
+      "description": "分析 Excel 数据。",
+      "parameters": {
+        "path": {
+          "type": "string"
+        },
+        "sheet_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sheet_name"
+      ]
+    },
+    {
+      "name": "find_excel_keyword",
+      "description": "搜索 Excel 关键词。",
+      "parameters": {
+        "path": {
+          "type": "string"
+        },
+        "keyword": {
+          "type": "string"
+        },
+        "sheet_name": {
+          "type": "string"
+        },
+        "max_rows": {
+          "type": "integer"
+        },
+        "max_cols": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "keyword",
+        "sheet_name",
+        "max_rows",
+        "max_cols"
+      ]
+    },
+    {
+      "name": "read_excel_range",
+      "description": "读取 Excel 区域。",
+      "parameters": {
+        "path": {
+          "type": "string"
+        },
+        "sheet_name": {
+          "type": "string"
+        },
+        "cell_range": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sheet_name",
+        "cell_range"
+      ]
+    }
+  ]
+}

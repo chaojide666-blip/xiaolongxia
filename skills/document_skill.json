@@ -1,0 +1,23 @@
+{
+  "name": "document_skill",
+  "module": "document_skill",
+  "description": "文档读取技能",
+  "functions": [
+    {
+      "name": "read_document",
+      "description": "读取 DOCX 或常见文本文件的实际内容。",
+      "parameters": {
+        "path": {
+          "type": "string"
+        },
+        "max_chars": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "max_chars"
+      ]
+    }
+  ]
+}

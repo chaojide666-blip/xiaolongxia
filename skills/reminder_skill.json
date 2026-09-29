@@ -1,0 +1,30 @@
+{
+  "name": "reminder_skill",
+  "module": "reminder_skill",
+  "description": "定时提醒技能：添加、查看、删除提醒。支持相对时间（如“2分钟后”）。",
+  "functions": [
+    {
+      "name": "add_reminder",
+      "description": "添加提醒。time_str 可以是标准格式 YYYY-MM-DD HH:MM，也可以是相对时间如“2分钟后”“半小时后”。content 为提醒内容。",
+      "parameters": {
+        "time_str": {"type": "string", "description": "提醒时间"},
+        "content": {"type": "string", "description": "提醒内容"}
+      },
+      "required": ["time_str", "content"]
+    },
+    {
+      "name": "list_reminders",
+      "description": "查看所有提醒。",
+      "parameters": {},
+      "required": []
+    },
+    {
+      "name": "delete_reminder",
+      "description": "删除指定序号的提醒。index 从 0 开始。",
+      "parameters": {
+        "index": {"type": "integer", "description": "提醒序号，从 0 开始"}
+      },
+      "required": ["index"]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "pdf_skill",
+  "module": "pdf_skill",
+  "description": "PDF 读取技能",
+  "functions": [
+    {
+      "name": "read_pdf",
+      "description": "读取 PDF 的文本内容和页数。",
+      "parameters": {
+        "path": {
+          "type": "string"
+        },
+        "max_chars": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "max_chars"
+      ]
+    }
+  ]
+}

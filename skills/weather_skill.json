@@ -1,0 +1,15 @@
+{
+  "name": "weather_skill",
+  "module": "weather_skill",
+  "description": "天气查询技能",
+  "functions": [
+    {
+      "name": "get_weather",
+      "description": "【强制使用】查询指定城市的实时天气。只要用户提到天气、气温、温度、冷热、下雨、湿度、风力、晴雨，必须使用这个工具，禁止用 web_search 查天气。",
+      "parameters": {
+        "city": {"type": "string", "description": "城市名，如深圳、北京、上海"}
+      },
+      "required": ["city"]
+    }
+  ]
+}

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐶 饭加鱼</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="layout">
+
+    <!-- ========== 左侧边栏 ========== -->
+    <aside class="sidebar">
+        <div class="sidebar-top">
+            <div class="sidebar-logo">🐶 饭加鱼</div>
+        </div>
+
+        <button class="new-chat-btn" onclick="newChat()">
+            <span>＋</span> 新对话
+        </button>
+
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">快捷技能</div>
+            <div class="skill-item" onclick="sendExample('深圳今天天气怎么样')">
+                <span>🌤</span> 查天气
+            </div>
+            <div class="skill-item" onclick="sendExample('帮我看看桌面上有什么文件')">
+                <span>📁</span> 看桌面文件
+            </div>
+            <div class="skill-item" onclick="sendExample('搜索人工智能最新新闻')">
+                <span>🔍</span> 搜新闻
+            </div>
+            <div class="skill-item" onclick="sendExample('提醒我 5 分钟后开会')">
+                <span>⏰</span> 设提醒
+            </div>
+            <div class="skill-item" onclick="sendExample('帮我做个关于人工智能的PPT')">
+                <span>📊</span> 做 PPT
+            </div>
+            <div class="skill-item" onclick="sendExample('帮我写一份本周工作周报')">
+                <span>📝</span> 写文档
+            </div>
+        </div>
+
+        <div class="sidebar-bottom">
+            <div class="skill-item" onclick="exportChat()">
+                <span>📥</span> 导出记录
+            </div>
+            <div class="skill-item" onclick="alert('设置功能开发中～')">
+                <span>⚙️</span> 设置
+            </div>
+        </div>
+    </aside>
+
+    <!-- ========== 主区域 ========== -->
+    <div class="app">
+
+        <!-- 顶部 -->
+        <header class="header">
+            <div class="header-left"></div>
+            <div class="header-center">
+                <div class="header-title">🐶 饭加鱼</div>
+                <div class="header-sub">你的私人 AI 员工</div>
+            </div>
+            <div class="header-right">
+                <button class="icon-btn" title="清空对话" onclick="clearChat()">🗑</button>
+            </div>
+        </header>
+
+        <!-- 聊天区 -->
+        <main class="chat-area" id="chatArea">
+            <div class="welcome" id="welcome">
+                <div class="welcome-logo">🐶</div>
+                <div class="welcome-title">我是饭加鱼</div>
+                <div class="welcome-sub">会聊天 · 会记忆 · 会完成任务</div>
+                <div class="welcome-examples">
+                    <div class="example" onclick="sendExample('深圳今天天气怎么样')">深圳今天天气怎么样</div>
+                    <div class="example" onclick="sendExample('帮我看看桌面上有什么文件')">帮我看看桌面上有什么文件</div>
+                    <div class="example" onclick="sendExample('搜索人工智能最新新闻')">搜索人工智能最新新闻</div>
+                    <div class="example" onclick="sendExample('提醒我 5 分钟后开会')">提醒我 5 分钟后开会</div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 底部输入区 -->
+        <footer class="input-area">
+            <div class="input-wrap">
+                <textarea
+                    id="msgInput"
+                    placeholder="给饭加鱼发送消息..."
+                    rows="1"
+                    onkeydown="handleKey(event)"
+                    oninput="autoResize(this)"
+                ></textarea>
+                <button id="sendBtn" onclick="sendMessage()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
+            <div class="input-hint">饭加鱼可能会犯错，请核实重要信息。</div>
+        </footer>
+
+    </div>
+
+</div>
+
+<script>
+    let history = [];
+    let isSending = false;
+
+    const chatArea = document.getElementById('chatArea');
+    const welcome = document.getElementById('welcome');
+    const msgInput = document.getElementById('msgInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    function autoResize(el) {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    }
+
+    function handleKey(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    }
+
+    function sendExample(text) {
+        msgInput.value = text;
+        sendMessage();
+    }
+
+    function newChat() {
+        history = [];
+        chatArea.innerHTML = `
+            <div class="welcome" id="welcome">
+                <div class="welcome-logo">🐶</div>
+                <div class="welcome-title">我是饭加鱼</div>
+                <div class="welcome-sub">会聊天 · 会记忆 · 会完成任务</div>
+                <div class="welcome-examples">
+                    <div class="example" onclick="sendExample('深圳今天天气怎么样')">深圳今天天气怎么样</div>
+                    <div class="example" onclick="sendExample('帮我看看桌面上有什么文件')">帮我看看桌面上有什么文件</div>
+                    <div class="example" onclick="sendExample('搜索人工智能最新新闻')">搜索人工智能最新新闻</div>
+                    <div class="example" onclick="sendExample('提醒我 5 分钟后开会')">提醒我 5 分钟后开会</div>
+                </div>
+            </div>
+        `;
+    }
+
+    function clearChat() {
+        if (history.length === 0) return;
+        if (!confirm('确定要清空当前对话吗？')) return;
+        newChat();
+    }
+
+    function exportChat() {
+        if (history.length === 0) {
+            alert('当前没有对话记录～');
+            return;
+        }
+        let text = '饭加鱼对话记录\n导出时间：' + new Date().toLocaleString() + '\n\n';
+        history.forEach(item => {
+            const role = item.role === 'user' ? '【主人】' : '【饭加鱼】';
+            text += role + ' ' + item.content + '\n\n';
+        });
+        const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '饭加鱼对话_' + Date.now() + '.txt';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function appendMessage(role, content) {
+        const w = document.getElementById('welcome');
+        if (w) w.style.display = 'none';
+
+        const row = document.createElement('div');
+        row.className = 'msg-row ' + role;
+
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = role === 'user' ? '你' : '🐶';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.textContent = content;
+
+        if (role === 'user') {
+            row.appendChild(bubble);
+            row.appendChild(avatar);
+        } else {
+            row.appendChild(avatar);
+            row.appendChild(bubble);
+        }
+
+        chatArea.appendChild(row);
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function showTyping() {
+        const row = document.createElement('div');
+        row.className = 'msg-row assistant';
+        row.id = 'typingRow';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = '🐶';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+
+        row.appendChild(avatar);
+        row.appendChild(bubble);
+        chatArea.appendChild(row);
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function removeTyping() {
+        const el = document.getElementById('typingRow');
+        if (el) el.remove();
+    }
+
+    async function sendMessage() {
+        const text = msgInput.value.trim();
+        if (!text || isSending) return;
+
+        isSending = true;
+        sendBtn.disabled = true;
+
+        msgInput.value = '';
+        autoResize(msgInput);
+
+        appendMessage('user', text);
+        showTyping();
+
+        try {
+            const resp = await fetch('/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: text, history: history})
+            });
+
+            const data = await resp.json();
+            removeTyping();
+
+            const reply = data.reply || '（没有回复）';
+            appendMessage('assistant', reply);
+
+            history.push({role: 'user', content: text});
+            history.push({role: 'assistant', content: reply});
+
+            if (data.file) {
+                appendFile(data.file);
+            }
+        } catch (e) {
+            removeTyping();
+            appendMessage('assistant', '出错了：' + e.message);
+        } finally {
+            isSending = false;
+            sendBtn.disabled = false;
+            msgInput.focus();
+        }
+    }
+
+    function appendFile(path) {
+        const row = document.createElement('div');
+        row.className = 'msg-row assistant';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = '📎';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble file-bubble';
+
+        const link = document.createElement('a');
+        link.href = '/download?path=' + encodeURIComponent(path);
+        const name = path.split(/[\\\\/]/).pop();
+        link.textContent = '点击下载：' + name;
+        link.target = '_blank';
+
+        bubble.appendChild(link);
+        row.appendChild(avatar);
+        row.appendChild(bubble);
+        chatArea.appendChild(row);
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    msgInput.focus();
+</script>
+
+</body>
+</html>

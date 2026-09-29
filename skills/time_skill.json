@@ -1,0 +1,13 @@
+{
+  "name": "time_skill",
+  "module": "time_skill",
+  "description": "时间技能",
+  "functions": [
+    {
+      "name": "get_current_time",
+      "description": "获取当前电脑的日期和时间。",
+      "parameters": {},
+      "required": []
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "ppt_skill",
+  "module": "ppt_skill",
+  "description": "PPT 读取技能",
+  "functions": [
+    {
+      "name": "read_ppt",
+      "description": "读取 PPTX 的实际内容。",
+      "parameters": {
+        "path": {
+          "type": "string"
+        },
+        "max_chars": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "max_chars"
+      ]
+    }
+  ]
+}
