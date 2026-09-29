@@ -7,3 +7,4 @@ openpyxl
 pypdf
 tavily-python
 gunicorn
+beautifulsoup4
