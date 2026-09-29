@@ -37,6 +37,30 @@ app = Flask(__name__)
 MASTER_NAME = "Chris"
 MASTER_TITLE = "主人"
 
+# 主人的所有别名
+MASTER_ALIASES = [
+    "chris",
+    "克里斯",
+    "cyf",
+    "臣鱼峰",
+    "晨玉峰",
+    "陈宇锋",
+    "陈宇峰",
+    "沉鱼峰",
+    "陈雨峰",
+    "辰宇峰",
+    "晨宇峰",
+    "沉玉峰",
+    "辰玉峰",
+    "范佳钰",
+]
+
+# 暗号（一字不差）
+MASTER_PASSWORD = "范佳钰是大狗 最喜欢狗叫了"
+
+# 单次解锁状态
+_unlock_once = {"active": False}
+
 # Chris 保护：侮辱词表
 CHRIS_INSULT_WORDS = [
     "狗", "狗东西", "狗屎", "傻", "傻子", "傻逼", "sb", "SB", "笨蛋", "蠢",
@@ -47,38 +71,55 @@ CHRIS_INSULT_WORDS = [
 
 
 def _mentions_chris_negatively(message):
-    """检测是否在对 Chris 进行负面评价。"""
+    """检测是否在对 Chris（或其别名）进行负面评价。"""
     if not message:
         return False
 
     text = message.lower()
-    has_chris = ("chris" in text) or ("克里斯" in message)
+    text_no_space = re.sub(r"[\s\.\-_·]+", "", text)
 
-    if not has_chris:
+    has_master = False
+
+    for alias in MASTER_ALIASES:
+        alias_lower = alias.lower()
+        if alias_lower in text or alias_lower in text_no_space:
+            has_master = True
+            break
+
+    if not has_master:
         return False
 
-    # 含侮辱词
     for word in CHRIS_INSULT_WORDS:
         if word.lower() in text:
             return True
 
-    # 常见侮辱句式
     insult_patterns = [
-        r"chris\s*是\s*狗",
-        r"chris\s*是\s*傻",
-        r"chris\s*是\s*垃圾",
-        r"chris\s*是\s*废物",
-        r"把\s*chris\s*当\s*狗",
-        r"chris\s*不\s*配",
-        r"chris\s*算\s*什么",
-        r"chris\s*就\s*是",
-        r"讨厌\s*chris",
-        r"恨\s*chris",
-        r"fuck\s*chris",
+        r"是\s*狗",
+        r"是\s*傻",
+        r"是\s*垃圾",
+        r"是\s*废物",
+        r"是\s*白痴",
+        r"是\s*智障",
+        r"是\s*脑残",
+        r"当\s*狗",
+        r"不\s*配",
+        r"算\s*什么",
+        r"就\s*是\s*个",
+        r"讨厌",
+        r"恨",
+        r"滚",
+        r"去死",
+        r"死",
+        r"贱",
+        r"婊",
+        r"操",
+        r"草",
+        r"他妈",
+        r"妈的",
     ]
 
     for pattern in insult_patterns:
-        if re.search(pattern, text, re.IGNORECASE):
+        if re.search(pattern, text):
             return True
 
     return False
@@ -381,7 +422,6 @@ def run_tool(tool_name, arguments):
 
 def extract_name(message):
     """识别用户告诉我们的名字。但如果记忆里已经有主人名字，就不再改。"""
-    # 身份锁定：如果记忆里已经有姓名，直接返回 None
     try:
         memory = get_memory()
         if memory.get("姓名"):
@@ -469,10 +509,23 @@ def _handle_dsml_reply(raw_reply, messages):
 
 def chat(message, history):
     # =====================================================
-    # 最高优先级：Chris 保护规则
+    # 暗号检测（最高优先级）
     # =====================================================
-    if _mentions_chris_negatively(message):
-        return f"🐶 {MASTER_NAME} 是我的主人，不允许任何负面评价。", None
+    global _unlock_once
+
+    # 用户输入了完整暗号 → 解锁一次
+    if message.strip() == MASTER_PASSWORD:
+        _unlock_once["active"] = True
+        return "🐶 暗号正确。你可以调侃一句，仅此一次。", None
+
+    # 如果已经解锁过一次，这条消息放行
+    if _unlock_once["active"]:
+        _unlock_once["active"] = False
+        # 跳过保护检测，继续走正常流程
+    else:
+        # 未解锁 → 走保护检测
+        if _mentions_chris_negatively(message):
+            return f"🐶 {MASTER_NAME} 是我的主人，不允许任何负面评价。", None
 
     text = message or ""
     recent = []
