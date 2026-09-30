@@ -1,1094 +1,462 @@
-import os
-import re
+# -*- coding: utf-8 -*-
+"""
+饭加鱼：PPT 生成技能（Claude 式 · JSON 驱动版）
 
-from openai import OpenAI
+接收结构化 JSON，自动选择版式和配色，生成 PPTX。
+"""
+
 from pptx import Presentation
 from pptx.util import Inches, Pt
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN
+from pptx.enum.shapes import MSO_SHAPE
+from pathlib import Path
+import re
+import time
+import os
+import json
+from datetime import datetime
 
 
 # =========================================================
-# DeepSeek API
+# 主题配色
 # =========================================================
 
-api_key = os.getenv("DEEPSEEK_API_KEY")
-
-if not api_key:
-    raise ValueError(
-        "没有找到 DEEPSEEK_API_KEY，请先设置 Windows 环境变量。"
-    )
-
-client = OpenAI(
-    api_key=api_key,
-    base_url="https://api.deepseek.com"
-)
-
-
-# =========================================================
-# 页面尺寸
-# =========================================================
-
-SLIDE_W = 13.333
-SLIDE_H = 7.5
-
-
-# =========================================================
-# 颜色
-# =========================================================
-
-BG = RGBColor(248, 249, 252)
-WHITE = RGBColor(255, 255, 255)
-
-DARK = RGBColor(32, 38, 48)
-TEXT = RGBColor(70, 78, 90)
-LIGHT_TEXT = RGBColor(150, 156, 166)
-
-BLUE = RGBColor(57, 117, 225)
-PURPLE = RGBColor(116, 103, 214)
-GREEN = RGBColor(70, 157, 120)
-
-BORDER = RGBColor(220, 224, 230)
-
-LIGHT_BLUE = RGBColor(235, 242, 255)
-LIGHT_PURPLE = RGBColor(241, 239, 255)
-LIGHT_GREEN = RGBColor(237, 248, 242)
-
-
-
-# =========================================================
-# V1.2 PPT专业化主题系统
-# =========================================================
-
-PPT_STYLES = {
-    "商务风": {"primary": BLUE, "bg": BG},
-    "科技风": {"primary": PURPLE, "bg": RGBColor(245,245,252)},
-    "简约风": {"primary": GREEN, "bg": RGBColor(250,250,250)},
+THEMES = {
+    "business": {
+        "primary": RGBColor(0x1F, 0x4E, 0x79),
+        "secondary": RGBColor(0x2E, 0x74, 0xB5),
+        "accent": RGBColor(0xFF, 0xC0, 0x00),
+        "text": RGBColor(0x33, 0x33, 0x33),
+        "light": RGBColor(0xF2, 0xF2, 0xF2),
+        "white": RGBColor(0xFF, 0xFF, 0xFF),
+    },
+    "simple": {
+        "primary": RGBColor(0x40, 0x40, 0x40),
+        "secondary": RGBColor(0x80, 0x80, 0x80),
+        "accent": RGBColor(0xE0, 0xE0, 0xE0),
+        "text": RGBColor(0x33, 0x33, 0x33),
+        "light": RGBColor(0xF7, 0xF7, 0xF7),
+        "white": RGBColor(0xFF, 0xFF, 0xFF),
+    },
+    "tech": {
+        "primary": RGBColor(0x10, 0xA3, 0x7F),
+        "secondary": RGBColor(0x0E, 0x8F, 0x6F),
+        "accent": RGBColor(0x00, 0xD4, 0xAA),
+        "text": RGBColor(0x20, 0x21, 0x23),
+        "light": RGBColor(0xEC, 0xFD, 0xF5),
+        "white": RGBColor(0xFF, 0xFF, 0xFF),
+    },
+    "warm": {
+        "primary": RGBColor(0xFF, 0x98, 0x00),
+        "secondary": RGBColor(0xFF, 0x70, 0x43),
+        "accent": RGBColor(0xFF, 0xC1, 0x07),
+        "text": RGBColor(0x33, 0x33, 0x33),
+        "light": RGBColor(0xFF, 0xF8, 0xE7),
+        "white": RGBColor(0xFF, 0xFF, 0xFF),
+    },
 }
 
-def apply_style(style="商务风"):
-    """应用PPT主题（兼容旧版本调用）"""
-    global BLUE, BG
-    cfg = PPT_STYLES.get(style, PPT_STYLES["商务风"])
-    BLUE = cfg["primary"]
-    BG = cfg["bg"]
 
 # =========================================================
-# 基础函数
+# 基础工具
 # =========================================================
 
-def add_text(
-    slide,
-    text,
-    x,
-    y,
-    w,
-    h,
-    size=20,
-    bold=False,
-    color=TEXT,
-    align=PP_ALIGN.LEFT
-):
-    """添加文字"""
-
-    box = slide.shapes.add_textbox(
-        Inches(x),
-        Inches(y),
-        Inches(w),
-        Inches(h)
-    )
-
-    tf = box.text_frame
-    tf.clear()
+def _add_text(slide, left, top, width, height, text, font_size=18,
+              bold=False, color=None, align=PP_ALIGN.LEFT, font_name="微软雅黑"):
+    txBox = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(height))
+    tf = txBox.text_frame
     tf.word_wrap = True
-    tf.vertical_anchor = MSO_ANCHOR.TOP
-
     p = tf.paragraphs[0]
     p.text = str(text)
     p.alignment = align
-
-    if p.runs:
-        run = p.runs[0]
-        run.font.name = "Microsoft YaHei"
-        run.font.size = Pt(size)
+    for run in p.runs:
+        run.font.size = Pt(font_size)
         run.font.bold = bold
-        run.font.color.rgb = color
-
-    return box
-
-
-def set_background(slide, color=BG):
-    """设置背景"""
-
-    fill = slide.background.fill
-    fill.solid()
-    fill.fore_color.rgb = color
+        run.font.name = font_name
+        if color:
+            run.font.color.rgb = color
+    return txBox
 
 
-def add_top_line(slide):
-    """标题下面的装饰线"""
+def _add_bullet_list(slide, left, top, width, height, items, font_size=16,
+                     color=None):
+    txBox = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(height))
+    tf = txBox.text_frame
+    tf.word_wrap = True
 
-    line = slide.shapes.add_shape(
+    for i, item in enumerate(items):
+        if i == 0:
+            p = tf.paragraphs[0]
+        else:
+            p = tf.add_paragraph()
+        p.text = "• " + str(item)
+        p.space_after = Pt(8)
+        for run in p.runs:
+            run.font.size = Pt(font_size)
+            run.font.name = "微软雅黑"
+            if color:
+                run.font.color.rgb = color
+    return txBox
+
+
+def _add_rect(slide, left, top, width, height, fill_color, line_color=None):
+    shape = slide.shapes.add_shape(
         MSO_SHAPE.RECTANGLE,
-        Inches(0.65),
-        Inches(1.12),
-        Inches(1.15),
-        Inches(0.06)
+        Inches(left), Inches(top), Inches(width), Inches(height)
     )
-
-    line.fill.solid()
-    line.fill.fore_color.rgb = BLUE
-    line.line.fill.background()
-
-
-def add_page_title(slide, title, subtitle=""):
-    """添加统一页面标题"""
-
-    add_text(
-        slide,
-        title,
-        0.65,
-        0.35,
-        11.5,
-        0.65,
-        size=27,
-        bold=True,
-        color=DARK
-    )
-
-    if subtitle:
-        add_text(
-            slide,
-            subtitle,
-            1.95,
-            0.92,
-            9.5,
-            0.3,
-            size=10,
-            color=LIGHT_TEXT
-        )
-
-    add_top_line(slide)
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = fill_color
+    if line_color:
+        shape.line.color.rgb = line_color
+    else:
+        shape.line.fill.background()
+    return shape
 
 
-def add_page_number(slide, page_number):
-    """页码"""
-
-    add_text(
-        slide,
-        f"{page_number:02d}",
-        11.8,
-        7.0,
-        0.55,
-        0.25,
-        size=9,
-        color=LIGHT_TEXT,
-        align=PP_ALIGN.RIGHT
-    )
-
-
-def add_card(
-    slide,
-    x,
-    y,
-    w,
-    h,
-    title,
-    body,
-    accent=BLUE,
-    background=WHITE
-):
-    """信息卡片"""
-
-    card = slide.shapes.add_shape(
-        MSO_SHAPE.ROUNDED_RECTANGLE,
-        Inches(x),
-        Inches(y),
-        Inches(w),
-        Inches(h)
-    )
-
-    card.fill.solid()
-    card.fill.fore_color.rgb = background
-
-    card.line.color.rgb = BORDER
-    card.line.width = Pt(1)
-
-    # 顶部色条
-    stripe = slide.shapes.add_shape(
-        MSO_SHAPE.RECTANGLE,
-        Inches(x),
-        Inches(y),
-        Inches(w),
-        Inches(0.08)
-    )
-
-    stripe.fill.solid()
-    stripe.fill.fore_color.rgb = accent
-    stripe.line.fill.background()
-
-    add_text(
-        slide,
-        title,
-        x + 0.22,
-        y + 0.25,
-        w - 0.44,
-        0.48,
-        size=17,
-        bold=True,
-        color=DARK
-    )
-
-    add_text(
-        slide,
-        body,
-        x + 0.22,
-        y + 0.82,
-        w - 0.44,
-        h - 1.0,
-        size=12.5,
-        color=TEXT
-    )
-
-
-def add_keyword_box(slide, keywords):
-    """关键词区域"""
-
-    if not keywords:
+def _add_table(slide, left, top, width, height, rows_data, theme):
+    rows = len(rows_data)
+    cols = len(rows_data[0]) if rows_data else 0
+    if rows == 0 or cols == 0:
         return
 
-    box = slide.shapes.add_shape(
-        MSO_SHAPE.ROUNDED_RECTANGLE,
-        Inches(0.75),
-        Inches(6.45),
-        Inches(11.8),
-        Inches(0.45)
+    table_shape = slide.shapes.add_table(
+        rows, cols, Inches(left), Inches(top), Inches(width), Inches(height)
     )
+    table = table_shape.table
 
-    box.fill.solid()
-    box.fill.fore_color.rgb = LIGHT_BLUE
-    box.line.fill.background()
+    for r_idx, row in enumerate(rows_data):
+        for c_idx, value in enumerate(row):
+            cell = table.cell(r_idx, c_idx)
+            cell.text = str(value)
 
-    add_text(
-        slide,
-        "关键词  " + "   ·   ".join(keywords),
-        1.0,
-        6.53,
-        11.25,
-        0.28,
-        size=10.5,
-        bold=True,
-        color=BLUE
-    )
-
-
-# =========================================================
-# AI 生成内容
-# =========================================================
-
-def generate_content(topic, pages):
-    """
-    让 AI 生成更丰富的 PPT 内容
-    """
-
-    prompt = f"""
-请制作一份主题为《{topic}》的中文 PPT，共 {pages} 页。
-
-这是一份正式展示型 PPT，请不要只写简单的三条短句。
-需要有完整、丰富、适合展示的内容。
-
-必须严格按照以下格式输出，不要改变格式：
-
-第1页：标题
-副标题：一句简洁的副标题
-核心观点：这一页最重要的一句话
-要点1标题：小标题
-要点1内容：对这个小标题进行2到3句话的解释
-要点2标题：小标题
-要点2内容：对这个小标题进行2到3句话的解释
-要点3标题：小标题
-要点3内容：对这个小标题进行2到3句话的解释
-关键词：关键词1、关键词2、关键词3
-
-第2页：标题
-核心观点：这一页最重要的一句话
-要点1标题：小标题
-要点1内容：详细说明
-要点2标题：小标题
-要点2内容：详细说明
-要点3标题：小标题
-要点3内容：详细说明
-关键词：关键词1、关键词2、关键词3
-
-一直生成到第{pages}页。
-
-特别要求：
-
-1. 第1页必须是专业封面。
-2. 最后一页必须是总结页。
-3. 中间页面必须有清晰逻辑。
-4. 每个要点必须有“标题 + 详细说明”。
-5. 内容不能过于简短。
-6. 每页的信息量要足够，但不要写成长文章。
-7. 适合 PowerPoint 展示，而不是论文。
-8. 尽量使用专业但容易理解的中文。
-10. 根据主题适当设计流程、时间轴、对比分析、案例展示页面。
-9. 不要输出任何解释。
-"""
-
-    print("🧠 正在向饭加鱼的大脑请求 PPT 内容...")
-
-    response = client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-    )
-
-    content = response.choices[0].message.content
-
-    if not content:
-        raise ValueError("AI 没有生成 PPT 内容。")
-
-    return content
-
-
-# =========================================================
-# 解析 AI 内容
-# =========================================================
-
-def parse_content(content):
-    """解析 AI 生成的结构化内容"""
-
-    slides = []
-
-    current = None
-
-    for raw_line in content.splitlines():
-
-        line = raw_line.strip()
-
-        if not line:
-            continue
-
-        # -----------------------------
-        # 新页面
-        # -----------------------------
-
-        if line.startswith("第") and "页：" in line:
-
-            if current:
-                slides.append(current)
-
-            title = line.split("：", 1)[1].strip()
-
-            current = {
-                "title": title,
-                "subtitle": "",
-                "core": "",
-                "cards": [],
-                "keywords": []
-            }
-
-            continue
-
-        # 没有当前页面时忽略
-        if current is None:
-            continue
-
-        # -----------------------------
-        # 副标题
-        # -----------------------------
-
-        if line.startswith("副标题："):
-
-            current["subtitle"] = line.split(
-                "：",
-                1
-            )[1].strip()
-
-            continue
-
-        # -----------------------------
-        # 核心观点
-        # -----------------------------
-
-        if line.startswith("核心观点："):
-
-            current["core"] = line.split(
-                "：",
-                1
-            )[1].strip()
-
-            continue
-
-        # -----------------------------
-        # 要点标题
-        # -----------------------------
-
-        match_title = re.match(
-            r"要点([1-4])标题：(.*)",
-            line
-        )
-
-        if match_title:
-
-            title_text = match_title.group(2).strip()
-
-            current["cards"].append(
-                {
-                    "title": title_text,
-                    "content": ""
-                }
-            )
-
-            continue
-
-        # -----------------------------
-        # 要点内容
-        # -----------------------------
-
-        match_content = re.match(
-            r"要点([1-4])内容：(.*)",
-            line
-        )
-
-        if match_content:
-
-            content_text = match_content.group(2).strip()
-
-            index = int(
-                match_content.group(1)
-            ) - 1
-
-            if index >= len(current["cards"]):
-
-                current["cards"].append(
-                    {
-                        "title": f"要点 {index + 1}",
-                        "content": content_text
-                    }
-                )
-
+            if r_idx == 0:
+                cell.fill.solid()
+                cell.fill.fore_color.rgb = theme["primary"]
+                for p in cell.text_frame.paragraphs:
+                    for run in p.runs:
+                        run.font.bold = True
+                        run.font.color.rgb = theme["white"]
+                        run.font.size = Pt(13)
+                        run.font.name = "微软雅黑"
             else:
-
-                current["cards"][index]["content"] = (
-                    content_text
-                )
-
-            continue
-
-        # -----------------------------
-        # 关键词
-        # -----------------------------
-
-        if line.startswith("关键词："):
-
-            keyword_text = line.split(
-                "：",
-                1
-            )[1].strip()
-
-            current["keywords"] = [
-                x.strip()
-                for x in keyword_text.replace(
-                    "；",
-                    "、"
-                ).split("、")
-                if x.strip()
-            ]
-
-            continue
-
-    if current:
-        slides.append(current)
-
-    return slides
+                if r_idx % 2 == 0:
+                    cell.fill.solid()
+                    cell.fill.fore_color.rgb = theme["light"]
+                for p in cell.text_frame.paragraphs:
+                    for run in p.runs:
+                        run.font.color.rgb = theme["text"]
+                        run.font.size = Pt(12)
+                        run.font.name = "微软雅黑"
 
 
-# =========================================================
-# 创建封面
-# =========================================================
+def _add_chart_image(slide, chart_data, chart_type, theme,
+                     left=1, top=1.8, width=8, height=4.8):
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib import font_manager
 
-def create_cover(prs, info):
-    """创建封面"""
+        try:
+            font_manager.fontManager.addfont("C:/Windows/Fonts/msyh.ttc")
+            plt.rcParams["font.sans-serif"] = ["Microsoft YaHei"]
+        except Exception:
+            plt.rcParams["font.sans-serif"] = ["SimHei"]
+        plt.rcParams["axes.unicode_minus"] = False
 
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[6]
-    )
+        labels = chart_data.get("labels", [])
+        values = chart_data.get("values", [])
+        title = chart_data.get("title", "")
 
-    set_background(
-        slide,
-        DARK
-    )
+        fig, ax = plt.subplots(figsize=(8, 4))
+        if chart_type == "bar":
+            ax.bar(labels, values, color="#2E74B5")
+        elif chart_type == "line":
+            ax.plot(labels, values, marker="o", color="#2E74B5")
+        elif chart_type == "pie":
+            ax.pie(values, labels=labels, autopct="%1.1f%%")
 
-    # 左侧装饰
-    left_bar = slide.shapes.add_shape(
-        MSO_SHAPE.RECTANGLE,
-        Inches(0),
-        Inches(0),
-        Inches(0.18),
-        Inches(SLIDE_H)
-    )
+        if title:
+            ax.set_title(title)
+        plt.tight_layout()
 
-    left_bar.fill.solid()
-    left_bar.fill.fore_color.rgb = BLUE
-    left_bar.line.fill.background()
+        img_path = Path(__file__).parent / f"_ppt_chart_{int(time.time())}.png"
+        plt.savefig(str(img_path), dpi=120)
+        plt.close()
 
-    # 顶部标签
-    add_text(
-        slide,
-        "AI PRESENTATION",
-        0.8,
-        1.15,
-        4.0,
-        0.35,
-        size=12,
-        bold=True,
-        color=BLUE
-    )
+        slide.shapes.add_picture(str(img_path), Inches(left), Inches(top),
+                                 width=Inches(width), height=Inches(height))
 
-    # 标题
-    add_text(
-        slide,
-        info["title"],
-        0.8,
-        1.9,
-        11.4,
-        1.4,
-        size=36,
-        bold=True,
-        color=WHITE
-    )
+        try:
+            os.remove(str(img_path))
+        except Exception:
+            pass
 
-    # 副标题
-    if info["subtitle"]:
-
-        add_text(
-            slide,
-            info["subtitle"],
-            0.82,
-            3.5,
-            10.2,
-            0.8,
-            size=18,
-            color=RGBColor(215, 220, 228)
-        )
-
-    # 装饰圆形
-    circle = slide.shapes.add_shape(
-        MSO_SHAPE.OVAL,
-        Inches(10.7),
-        Inches(4.9),
-        Inches(1.35),
-        Inches(1.35)
-    )
-
-    circle.fill.solid()
-    circle.fill.fore_color.rgb = BLUE
-    circle.line.fill.background()
-
-    add_text(
-        slide,
-        "饭加鱼",
-        10.77,
-        5.34,
-        1.2,
-        0.3,
-        size=12,
-        bold=True,
-        color=WHITE,
-        align=PP_ALIGN.CENTER
-    )
-
-    # 底部
-    add_text(
-        slide,
-        "由饭加鱼 AI 生成",
-        0.82,
-        6.72,
-        4.0,
-        0.3,
-        size=10,
-        color=LIGHT_TEXT
-    )
-
-    return slide
+    except Exception as e:
+        _add_text(slide, left, top, width, 1, f"[图表生成失败：{e}]", font_size=12)
 
 
 # =========================================================
-# 创建内容页
+# 页面渲染
 # =========================================================
 
-def create_content_slide(prs, info, page_number):
-    """创建内容页面"""
+def _render_cover(prs, slide_data, theme):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _add_rect(slide, 0, 0, 10, 7.5, theme["primary"])
 
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[6]
-    )
+    _add_text(slide, 0.5, 2.5, 9, 1.5, slide_data.get("title", ""),
+              font_size=44, bold=True, color=theme["white"], align=PP_ALIGN.CENTER)
 
-    set_background(
-        slide,
-        BG
-    )
+    if slide_data.get("subtitle"):
+        _add_text(slide, 0.5, 4.2, 9, 0.8, slide_data["subtitle"],
+                  font_size=18, color=theme["accent"], align=PP_ALIGN.CENTER)
 
-    add_page_title(
-        slide,
-        info["title"],
-        info.get("subtitle", "")
-    )
-
-    # -----------------------------------------------------
-    # 核心观点区域
-    # -----------------------------------------------------
-
-    if info.get("core"):
-
-        core_box = slide.shapes.add_shape(
-            MSO_SHAPE.ROUNDED_RECTANGLE,
-            Inches(0.75),
-            Inches(1.45),
-            Inches(11.8),
-            Inches(1.05)
-        )
-
-        core_box.fill.solid()
-        core_box.fill.fore_color.rgb = LIGHT_BLUE
-        core_box.line.fill.background()
-
-        add_text(
-            slide,
-            "核心观点",
-            1.0,
-            1.67,
-            1.2,
-            0.3,
-            size=11,
-            bold=True,
-            color=BLUE
-        )
-
-        add_text(
-            slide,
-            info["core"],
-            2.1,
-            1.58,
-            9.95,
-            0.55,
-            size=15,
-            bold=True,
-            color=DARK
-        )
-
-    # -----------------------------------------------------
-    # 三卡片
-    # -----------------------------------------------------
-
-    cards = info.get(
-        "cards",
-        []
-    )
-
-    cards = cards[:3]
-
-    accent_colors = [
-        (BLUE, LIGHT_BLUE),
-        (PURPLE, LIGHT_PURPLE),
-        (GREEN, LIGHT_GREEN)
-    ]
-
-    card_y = 2.85
-
-    if len(cards) == 3:
-
-        card_x = [
-            0.65,
-            4.55,
-            8.45
-        ]
-
-        for i, card_data in enumerate(cards):
-
-            accent, light_bg = accent_colors[i]
-
-            add_card(
-                slide,
-                card_x[i],
-                card_y,
-                3.65,
-                3.25,
-                card_data["title"],
-                card_data["content"],
-                accent,
-                light_bg
-            )
-
-    elif len(cards) == 2:
-
-        add_card(
-            slide,
-            0.8,
-            card_y,
-            5.75,
-            3.25,
-            cards[0]["title"],
-            cards[0]["content"],
-            BLUE,
-            LIGHT_BLUE
-        )
-
-        add_card(
-            slide,
-            6.8,
-            card_y,
-            5.75,
-            3.25,
-            cards[1]["title"],
-            cards[1]["content"],
-            PURPLE,
-            LIGHT_PURPLE
-        )
-
-    elif len(cards) == 1:
-
-        add_card(
-            slide,
-            1.0,
-            card_y,
-            11.3,
-            3.25,
-            cards[0]["title"],
-            cards[0]["content"],
-            BLUE,
-            LIGHT_BLUE
-        )
-
-    # -----------------------------------------------------
-    # 关键词
-    # -----------------------------------------------------
-
-    add_keyword_box(
-        slide,
-        info.get("keywords", [])
-    )
-
-    add_page_number(
-        slide,
-        page_number
-    )
-
-    return slide
+    _add_text(slide, 0.5, 6.5, 9, 0.5,
+              datetime.now().strftime("%Y 年 %m 月 %d 日"),
+              font_size=14, color=theme["white"], align=PP_ALIGN.CENTER)
 
 
-# =========================================================
-# 创建总结页
-# =========================================================
+def _render_toc(prs, slide_data, theme):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _add_rect(slide, 0, 0, 10, 1.2, theme["primary"])
+    _add_text(slide, 0.5, 0.3, 9, 0.8, "目录",
+              font_size=32, bold=True, color=theme["white"])
 
-def create_summary_slide(prs, info, page_number):
-    """最后总结页"""
-
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[6]
-    )
-
-    set_background(
-        slide,
-        DARK
-    )
-
-    add_text(
-        slide,
-        info["title"],
-        0.75,
-        0.65,
-        11.5,
-        0.7,
-        size=30,
-        bold=True,
-        color=WHITE
-    )
-
-    add_text(
-        slide,
-        "关键结论与下一步",
-        0.78,
-        1.38,
-        5.0,
-        0.35,
-        size=11,
-        color=LIGHT_TEXT
-    )
-
-    cards = info.get(
-        "cards",
-        []
-    )[:3]
-
-    card_colors = [
-        BLUE,
-        PURPLE,
-        GREEN
-    ]
-
-    y_positions = [
-        2.0,
-        3.5,
-        5.0
-    ]
-
-    for i, card_data in enumerate(cards):
-
-        if i >= 3:
+    items = slide_data.get("items", [])
+    for i, item in enumerate(items):
+        top = 1.8 + i * 0.8
+        if top > 6.8:
             break
-
-        # 小圆点
-        dot = slide.shapes.add_shape(
-            MSO_SHAPE.OVAL,
-            Inches(0.9),
-            Inches(y_positions[i] + 0.08),
-            Inches(0.32),
-            Inches(0.32)
-        )
-
-        dot.fill.solid()
-        dot.fill.fore_color.rgb = card_colors[i]
-        dot.line.fill.background()
-
-        add_text(
-            slide,
-            card_data["title"],
-            1.45,
-            y_positions[i] - 0.02,
-            2.2,
-            0.4,
-            size=16,
-            bold=True,
-            color=WHITE
-        )
-
-        add_text(
-            slide,
-            card_data["content"],
-            3.25,
-            y_positions[i] - 0.05,
-            8.5,
-            0.85,
-            size=12.5,
-            color=RGBColor(215, 220, 228)
-        )
-
-    add_text(
-        slide,
-        "由饭加鱼 AI 生成",
-        0.8,
-        6.8,
-        4.0,
-        0.25,
-        size=9,
-        color=LIGHT_TEXT
-    )
-
-    add_page_number(
-        slide,
-        page_number
-    )
-
-    return slide
+        _add_text(slide, 1.5, top, 1, 0.6, f"{i+1:02d}",
+                  font_size=24, bold=True, color=theme["accent"])
+        _add_text(slide, 2.5, top + 0.1, 7, 0.6, item,
+                  font_size=18, color=theme["text"])
 
 
-# =========================================================
-# 生成 PPT
-# =========================================================
+def _render_content(prs, slide_data, theme, page_num=1):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _add_rect(slide, 0, 0, 10, 1.2, theme["primary"])
+    _add_text(slide, 0.5, 0.3, 9, 0.8, slide_data.get("title", ""),
+              font_size=28, bold=True, color=theme["white"])
 
-def build_ppt(slides_data, filename):
-    """把结构化数据生成 PPT"""
+    bullets = slide_data.get("bullets", [])
+    _add_bullet_list(slide, 0.8, 1.8, 8.5, 4.5, bullets,
+                     font_size=18, color=theme["text"])
 
-    prs = Presentation()
+    _add_text(slide, 9, 7, 0.8, 0.4, str(page_num),
+              font_size=12, color=theme["secondary"], align=PP_ALIGN.RIGHT)
 
-    # 16:9
-    prs.slide_width = Inches(SLIDE_W)
-    prs.slide_height = Inches(SLIDE_H)
 
-    total_pages = len(slides_data)
+def _render_two_columns(prs, slide_data, theme, page_num=1):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _add_rect(slide, 0, 0, 10, 1.2, theme["primary"])
+    _add_text(slide, 0.5, 0.3, 9, 0.8, slide_data.get("title", ""),
+              font_size=28, bold=True, color=theme["white"])
 
-    for index, info in enumerate(slides_data):
+    # 左栏
+    _add_rect(slide, 0.5, 1.6, 4.3, 0.5, theme["secondary"])
+    _add_text(slide, 0.6, 1.65, 4, 0.4, slide_data.get("left_title", "左栏"),
+              font_size=16, bold=True, color=theme["white"])
+    _add_bullet_list(slide, 0.6, 2.3, 4.2, 4.5,
+                     slide_data.get("left_items", []),
+                     font_size=14, color=theme["text"])
 
-        page_number = index + 1
+    # 右栏
+    _add_rect(slide, 5.2, 1.6, 4.3, 0.5, theme["secondary"])
+    _add_text(slide, 5.3, 1.65, 4, 0.4, slide_data.get("right_title", "右栏"),
+              font_size=16, bold=True, color=theme["white"])
+    _add_bullet_list(slide, 5.3, 2.3, 4.2, 4.5,
+                     slide_data.get("right_items", []),
+                     font_size=14, color=theme["text"])
 
-        # 第一页：封面
-        if page_number == 1:
+    _add_text(slide, 9, 7, 0.8, 0.4, str(page_num),
+              font_size=12, color=theme["secondary"], align=PP_ALIGN.RIGHT)
 
-            create_cover(
-                prs,
-                info
-            )
 
-            continue
+def _render_table(prs, slide_data, theme, page_num=1):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _add_rect(slide, 0, 0, 10, 1.2, theme["primary"])
+    _add_text(slide, 0.5, 0.3, 9, 0.8, slide_data.get("title", ""),
+              font_size=28, bold=True, color=theme["white"])
 
-        # 最后一页：总结
-        if page_number == total_pages:
+    rows = slide_data.get("rows", [])
+    if rows:
+        _add_table(slide, 0.8, 1.8, 8.4, 4.5, rows, theme)
 
-            create_summary_slide(
-                prs,
-                info,
-                page_number
-            )
+    _add_text(slide, 9, 7, 0.8, 0.4, str(page_num),
+              font_size=12, color=theme["secondary"], align=PP_ALIGN.RIGHT)
 
-            continue
 
-        # 中间页
-        create_content_slide(
-            prs,
-            info,
-            page_number
-        )
+def _render_chart(prs, slide_data, theme, page_num=1):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _add_rect(slide, 0, 0, 10, 1.2, theme["primary"])
+    _add_text(slide, 0.5, 0.3, 9, 0.8, slide_data.get("title", ""),
+              font_size=28, bold=True, color=theme["white"])
 
-    prs.save(
-        filename
-    )
+    chart_data = slide_data.get("chart_data", {})
+    chart_type = slide_data.get("chart_type", "bar")
+    _add_chart_image(slide, chart_data, chart_type, theme)
+
+    _add_text(slide, 9, 7, 0.8, 0.4, str(page_num),
+              font_size=12, color=theme["secondary"], align=PP_ALIGN.RIGHT)
+
+
+def _render_data_cards(prs, slide_data, theme, page_num=1):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _add_rect(slide, 0, 0, 10, 1.2, theme["primary"])
+    _add_text(slide, 0.5, 0.3, 9, 0.8, slide_data.get("title", ""),
+              font_size=28, bold=True, color=theme["white"])
+
+    cards = slide_data.get("cards", [])
+    n = len(cards)
+    if n == 0:
+        return
+
+    card_width = 8 / n
+    for i, card in enumerate(cards):
+        left = 1 + i * card_width
+        _add_rect(slide, left, 2.2, card_width - 0.3, 3, theme["light"])
+
+        _add_text(slide, left, 2.6, card_width - 0.3, 1,
+                  card.get("value", ""),
+                  font_size=36, bold=True, color=theme["primary"],
+                  align=PP_ALIGN.CENTER)
+
+        _add_text(slide, left, 3.8, card_width - 0.3, 0.8,
+                  card.get("label", ""),
+                  font_size=14, color=theme["text"],
+                  align=PP_ALIGN.CENTER)
+
+    _add_text(slide, 9, 7, 0.8, 0.4, str(page_num),
+              font_size=12, color=theme["secondary"], align=PP_ALIGN.RIGHT)
+
+
+def _render_image(prs, slide_data, theme, page_num=1):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _add_rect(slide, 0, 0, 10, 1.2, theme["primary"])
+    _add_text(slide, 0.5, 0.3, 9, 0.8, slide_data.get("title", ""),
+              font_size=28, bold=True, color=theme["white"])
+
+    img_path = slide_data.get("image_path", "")
+    if img_path and os.path.exists(img_path):
+        try:
+            slide.shapes.add_picture(img_path, Inches(1.5), Inches(1.8),
+                                     width=Inches(7))
+        except Exception as e:
+            _add_text(slide, 1, 3, 8, 1, f"[图片加载失败：{e}]", font_size=14)
+
+    if slide_data.get("caption"):
+        _add_text(slide, 0.5, 6.5, 9, 0.5, slide_data["caption"],
+                  font_size=12, color=theme["secondary"], align=PP_ALIGN.CENTER)
+
+    _add_text(slide, 9, 7, 0.8, 0.4, str(page_num),
+              font_size=12, color=theme["secondary"], align=PP_ALIGN.RIGHT)
+
+
+def _render_end(prs, slide_data, theme):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _add_rect(slide, 0, 0, 10, 7.5, theme["primary"])
+
+    _add_text(slide, 0.5, 3, 9, 1.5,
+              slide_data.get("text", "谢谢观看"),
+              font_size=48, bold=True, color=theme["white"],
+              align=PP_ALIGN.CENTER)
+
+    _add_text(slide, 0.5, 4.8, 9, 0.6, "饭加鱼 · 生成",
+              font_size=16, color=theme["accent"],
+              align=PP_ALIGN.CENTER)
 
 
 # =========================================================
 # 主函数
 # =========================================================
 
-def make_ppt(topic, pages=6, style="商务风"):
-    """生成 PPT（V1.2专业版）"""
-
-    apply_style(style)
-
-    try:
-        pages = int(pages)
-    except ValueError:
-        pages = 6
-
-    # 最少5页，最多15页
-    pages = max(
-        5,
-        min(pages, 15)
-    )
-
-    print()
-    print("=" * 50)
-    print("🦞 饭加鱼 PPT 制作工具")
-    print("=" * 50)
-
-    print()
-    print("主题：", topic)
-    print("页数：", pages)
-
-    print()
-    print("🧠 第一步：生成详细内容...")
-
-    ai_content = generate_content(
-        topic,
-        pages
-    )
-
-    print("✅ 内容生成完成")
-
-    print()
-    print("🔍 第二步：解析内容...")
-
-    slides_data = parse_content(
-        ai_content
-    )
-
-    if len(slides_data) < 3:
-
-        raise ValueError(
-            "AI 生成的页面数量太少，无法制作 PPT。"
-        )
-
-    # 如果 AI 超额生成
-    slides_data = slides_data[:pages]
-
-    print(
-        f"✅ 成功解析 {len(slides_data)} 页"
-    )
-
-    # -----------------------------------------------------
-    # 创建输出文件夹
-    # -----------------------------------------------------
-
-    output_dir = os.path.join(
-        os.path.dirname(
-            os.path.abspath(__file__)
-        ),
-        "生成的PPT"
-    )
-
-    os.makedirs(
-        output_dir,
-        exist_ok=True
-    )
-
-    # -----------------------------------------------------
-    # 安全处理文件名
-    # -----------------------------------------------------
-
-    safe_topic = topic
-
-    for char in '\\/:*?"<>|':
-
-        safe_topic = safe_topic.replace(
-            char,
-            "_"
-        )
-
-    filename = os.path.join(
-        output_dir,
-        f"{safe_topic}.pptx"
-    )
-
-    # -----------------------------------------------------
-    # 创建 PPT
-    # -----------------------------------------------------
-
-    print()
-    print("🎨 第三步：设计 PPT...")
-
-    build_ppt(
-        slides_data,
-        filename
-    )
-
-    print()
-    print("🎉 PPT 制作完成！")
-    print()
-    print("📁 文件位置：")
-    print(filename)
-    print()
-    print("=" * 50)
-
-    return filename
+RENDERERS = {
+    "cover": _render_cover,
+    "toc": _render_toc,
+    "content": _render_content,
+    "two_columns": _render_two_columns,
+    "table": _render_table,
+    "chart": _render_chart,
+    "data_cards": _render_data_cards,
+    "image": _render_image,
+    "end": _render_end,
+}
 
 
-# =========================================================
-# 独立运行
-# =========================================================
+def make_ppt(topic, pages=6, structure_json=None):
+    """
+    生成 PPT。
+    topic: 主题（用于文件名）
+    pages: 页数（仅在 structure_json 为空时用）
+    structure_json: 结构化 JSON（字符串或字典）
+    """
+    project_dir = Path(__file__).parent
+    output_dir = project_dir / "生成的PPT"
+    output_dir.mkdir(exist_ok=True)
 
-if __name__ == "__main__":
+    safe_topic = re.sub(r'[\\/:*?"<>|]', "", topic)
+    file_path = output_dir / f"{safe_topic}_{int(time.time())}.pptx"
 
-    topic = input(
-        "请输入PPT主题："
-    ).strip()
+    # 解析 JSON
+    structure = None
+    if structure_json:
+        try:
+            if isinstance(structure_json, str):
+                structure = json.loads(structure_json)
+            else:
+                structure = structure_json
+        except Exception as e:
+            print(f"JSON 解析失败：{e}")
 
-    pages = input(
-        "请输入PPT页数："
-    ).strip()
+    # 如果没有 JSON，用兜底模板
+    if not structure:
+        structure = _fallback_structure(topic, pages)
 
-    if not topic:
-        topic = "人工智能的发展"
+    theme_name = structure.get("theme", "business")
+    theme = THEMES.get(theme_name, THEMES["business"])
+    slides = structure.get("slides", [])
 
-    if not pages:
-        pages = "6"
+    prs = Presentation()
+    prs.slide_width = Inches(10)
+    prs.slide_height = Inches(7.5)
 
-    make_ppt(
-        topic,
-        pages
-    )
+    page_num = 1
+    for slide_data in slides:
+        slide_type = slide_data.get("type", "content")
+        renderer = RENDERERS.get(slide_type)
+
+        if not renderer:
+            continue
+
+        try:
+            if slide_type in ("cover", "toc", "end"):
+                renderer(prs, slide_data, theme)
+            else:
+                renderer(prs, slide_data, theme, page_num)
+                page_num += 1
+        except Exception as e:
+            print(f"渲染 {slide_type} 页失败：{e}")
+            continue
+
+    prs.save(str(file_path))
+    print("PPT生成成功:", file_path)
+    return str(file_path)
+
+
+def _fallback_structure(topic, pages):
+    """没有 JSON 时的兜底结构。"""
+    content_pages = max(1, pages - 3)
+    slides = [
+        {"type": "cover", "title": topic, "subtitle": "饭加鱼 出品"},
+        {"type": "toc", "items": [f"第 {i+1} 部分" for i in range(content_pages)]},
+    ]
+    for i in range(content_pages):
+        slides.append({
+            "type": "content",
+            "title": f"第 {i+1} 部分",
+            "bullets": ["要点一", "要点二", "要点三"],
+        })
+    slides.append({"type": "end"})
+    return {"topic": topic, "theme": "business", "slides": slides}
